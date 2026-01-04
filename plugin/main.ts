@@ -8,18 +8,22 @@ import { GenerousAISettings, DEFAULT_SETTINGS, EncryptedData } from './types';
 import { GenerousAISettingTab } from './settings';
 import { encrypt, decrypt, generateSalt } from './crypto';
 import { GenerousAISidebarView, VIEW_TYPE_GENEROUS_AI } from './sidebar-view';
+import { SyncManager } from './sync/sync-manager';
 
 export default class GenerousAIPlugin extends Plugin {
 	settings: GenerousAISettings;
 	private masterPassword: string | null = null;
 	private statusBarItem: HTMLElement | null = null;
-	private syncInterval: number | null = null;
+	syncManager: SyncManager;
 
 	async onload() {
 		console.log('Loading Generous AI plugin');
 
 		// Load settings
 		await this.loadSettings();
+
+		// Initialize sync manager
+		this.syncManager = new SyncManager(this);
 
 		// Register sidebar view
 		this.registerView(
@@ -42,11 +46,6 @@ export default class GenerousAIPlugin extends Plugin {
 		// Register commands
 		this.registerCommands();
 
-		// Start sync interval if configured
-		if (this.settings.syncIntervalMinutes > 0) {
-			this.startSyncInterval();
-		}
-
 		console.log('Generous AI plugin loaded');
 	}
 
@@ -56,9 +55,9 @@ export default class GenerousAIPlugin extends Plugin {
 		// Close all sidebar views
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENEROUS_AI);
 
-		// Clear sync interval
-		if (this.syncInterval !== null) {
-			window.clearInterval(this.syncInterval);
+		// Cleanup sync manager
+		if (this.syncManager) {
+			this.syncManager.cleanup();
 		}
 
 		// Clear master password from memory
@@ -76,8 +75,16 @@ export default class GenerousAIPlugin extends Plugin {
 	/**
 	 * Set master password for this session (in memory only)
 	 */
-	setMasterPassword(password: string) {
+	async setMasterPassword(password: string) {
 		this.masterPassword = password;
+
+		// Initialize sync services now that we have the password
+		await this.syncManager.initialize();
+
+		// Start sync interval if configured
+		if (this.settings.syncIntervalMinutes > 0) {
+			this.syncManager.startSyncInterval();
+		}
 	}
 
 	/**
@@ -286,49 +293,17 @@ Welcome to your personal assistant!
 	}
 
 	/**
-	 * Start automatic sync interval
-	 */
-	startSyncInterval(): void {
-		if (this.syncInterval !== null) {
-			window.clearInterval(this.syncInterval);
-		}
-
-		const intervalMs = this.settings.syncIntervalMinutes * 60 * 1000;
-		this.syncInterval = window.setInterval(async () => {
-			await this.syncDataSources();
-		}, intervalMs);
-
-		console.log(`Sync interval started: ${this.settings.syncIntervalMinutes} minutes`);
-	}
-
-	/**
 	 * Sync all connected data sources
 	 */
 	async syncDataSources(): Promise<void> {
 		console.log('Starting data source sync...');
-
-		// Check if any data sources are connected
-		const hasConnections =
-			this.settings.googleTokens ||
-			this.settings.spotifyTokens ||
-			this.settings.ynabToken;
-
-		if (!hasConnections) {
-			new Notice('No data sources connected yet');
-			return;
-		}
 
 		if (this.statusBarItem) {
 			this.statusBarItem.setText('Generous AI: Syncing...');
 		}
 
 		try {
-			// TODO: Implement actual sync logic
-			new Notice('Sync feature coming soon');
-
-			// Update last sync timestamp
-			this.settings.lastSyncTimestamp = Date.now();
-			await this.saveSettings();
+			await this.syncManager.syncAll();
 		} catch (error) {
 			console.error('Sync failed:', error);
 			new Notice('Sync failed - check console for details');
