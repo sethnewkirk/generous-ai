@@ -35,11 +35,15 @@ export interface CachedData {
  */
 export interface Entity {
 	id?: number;
-	type: 'person' | 'organization' | 'place' | 'event' | 'project' | 'theme' | 'value' | 'goal';
+	type: 'person' | 'organization' | 'place' | 'event' | 'project' | 'theme' | 'value' | 'goal' | 'skill' | 'role' | 'habit' | 'interest' | 'product' | 'book' | 'music';
 	name: string;
+	aliases?: string[];
 	confidence: number; // 0-1
 	attributes: any; // JSON attributes
-	sources: string[]; // Array of source IDs
+	sources: any[]; // Array of EntitySource objects
+	firstSeen?: number;
+	lastSeen?: number;
+	occurrenceCount?: number;
 	createdAt: number;
 	updatedAt: number;
 }
@@ -53,8 +57,9 @@ export interface Relationship {
 	toEntityId: number;
 	type: string; // e.g., 'KNOWS', 'WORKS_WITH', 'DURING'
 	confidence: number;
+	strength?: number;
 	attributes: any;
-	sources: string[];
+	sources: any[]; // Array of EntitySource objects
 	createdAt: number;
 	updatedAt: number;
 }
@@ -84,6 +89,39 @@ export interface Message {
 }
 
 /**
+ * Detected patterns in The Weave
+ */
+export interface Pattern {
+	id?: number;
+	type: 'routine' | 'trend' | 'cycle' | 'anomaly' | 'cluster';
+	name: string;
+	description: string;
+	confidence: number;
+	entities: number[]; // Entity IDs
+	relationships: number[]; // Relationship IDs
+	temporal?: any; // TemporalInfo object
+	significance: number;
+	detectedAt: number;
+	metadata?: any;
+}
+
+/**
+ * Insights generated from The Weave
+ */
+export interface Insight {
+	id?: number;
+	type: 'observation' | 'suggestion' | 'question' | 'warning';
+	content: string;
+	confidence: number;
+	relevance: number;
+	basedOn: any; // Object with entities, relationships, patterns arrays
+	createdAt: number;
+	dismissed?: boolean;
+	dismissedAt?: number;
+	metadata?: any;
+}
+
+/**
  * Main database class
  */
 export class GenerousAIDatabase extends Dexie {
@@ -94,11 +132,13 @@ export class GenerousAIDatabase extends Dexie {
 	relationships!: Table<Relationship>;
 	conversations!: Table<Conversation>;
 	messages!: Table<Message>;
+	patterns!: Table<Pattern>;
+	insights!: Table<Insight>;
 
 	constructor() {
 		super('GenerousAI');
 
-		// Define schema
+		// Define schema - version 1
 		this.version(1).stores({
 			syncRecords: '++id, source, lastSync, status',
 			cachedData: '++id, source, dataType, externalId, lastUpdated',
@@ -106,6 +146,18 @@ export class GenerousAIDatabase extends Dexie {
 			relationships: '++id, fromEntityId, toEntityId, type, confidence',
 			conversations: '++id, startedAt, endedAt',
 			messages: '++id, conversationId, timestamp, role',
+		});
+
+		// Version 2: Add patterns and insights tables
+		this.version(2).stores({
+			syncRecords: '++id, source, lastSync, status',
+			cachedData: '++id, source, dataType, externalId, lastUpdated',
+			entities: '++id, type, name, confidence, createdAt',
+			relationships: '++id, fromEntityId, toEntityId, type, confidence',
+			conversations: '++id, startedAt, endedAt',
+			messages: '++id, conversationId, timestamp, role',
+			patterns: '++id, type, detectedAt, significance',
+			insights: '++id, type, createdAt, relevance, dismissed',
 		});
 	}
 

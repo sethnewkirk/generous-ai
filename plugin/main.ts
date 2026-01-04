@@ -8,18 +8,27 @@ import { GenerousAISettings, DEFAULT_SETTINGS, EncryptedData } from './types';
 import { GenerousAISettingTab } from './settings';
 import { encrypt, decrypt, generateSalt } from './crypto';
 import { GenerousAISidebarView, VIEW_TYPE_GENEROUS_AI } from './sidebar-view';
+import { SyncManager } from './sync/sync-manager';
+import { WeaveManager } from './weave/weave-manager';
 
 export default class GenerousAIPlugin extends Plugin {
 	settings: GenerousAISettings;
 	private masterPassword: string | null = null;
 	private statusBarItem: HTMLElement | null = null;
-	private syncInterval: number | null = null;
+	syncManager: SyncManager;
+	weaveManager: WeaveManager;
 
 	async onload() {
 		console.log('Loading Generous AI plugin');
 
 		// Load settings
 		await this.loadSettings();
+
+		// Initialize sync manager
+		this.syncManager = new SyncManager(this);
+
+		// Initialize weave manager
+		this.weaveManager = new WeaveManager(this);
 
 		// Register sidebar view
 		this.registerView(
@@ -42,11 +51,6 @@ export default class GenerousAIPlugin extends Plugin {
 		// Register commands
 		this.registerCommands();
 
-		// Start sync interval if configured
-		if (this.settings.syncIntervalMinutes > 0) {
-			this.startSyncInterval();
-		}
-
 		console.log('Generous AI plugin loaded');
 	}
 
@@ -56,9 +60,9 @@ export default class GenerousAIPlugin extends Plugin {
 		// Close all sidebar views
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENEROUS_AI);
 
-		// Clear sync interval
-		if (this.syncInterval !== null) {
-			window.clearInterval(this.syncInterval);
+		// Cleanup sync manager
+		if (this.syncManager) {
+			this.syncManager.cleanup();
 		}
 
 		// Clear master password from memory
@@ -76,8 +80,19 @@ export default class GenerousAIPlugin extends Plugin {
 	/**
 	 * Set master password for this session (in memory only)
 	 */
-	setMasterPassword(password: string) {
+	async setMasterPassword(password: string) {
 		this.masterPassword = password;
+
+		// Initialize sync services now that we have the password
+		await this.syncManager.initialize();
+
+		// Initialize weave manager
+		await this.weaveManager.initialize();
+
+		// Start sync interval if configured
+		if (this.settings.syncIntervalMinutes > 0) {
+			this.syncManager.startSyncInterval();
+		}
 	}
 
 	/**
@@ -249,18 +264,21 @@ Welcome to your personal assistant!
 			},
 		});
 
+		// Command: Build The Weave
+		this.addCommand({
+			id: 'build-weave',
+			name: 'Build The Weave from Data',
+			callback: async () => {
+				await this.buildWeave();
+			},
+		});
+
 		// Command: View The Weave
 		this.addCommand({
 			id: 'view-weave',
 			name: 'View The Weave',
-			callback: () => {
-				const weavePath = `${this.settings.userFolderPath}/The Weave/Overview.md`;
-				const weave = this.app.vault.getAbstractFileByPath(weavePath);
-				if (weave instanceof TFile) {
-					this.app.workspace.getLeaf().openFile(weave);
-				} else {
-					new Notice('The Weave has not been built yet');
-				}
+			callback: async () => {
+				await this.viewWeave();
 			},
 		});
 	}
@@ -286,49 +304,17 @@ Welcome to your personal assistant!
 	}
 
 	/**
-	 * Start automatic sync interval
-	 */
-	startSyncInterval(): void {
-		if (this.syncInterval !== null) {
-			window.clearInterval(this.syncInterval);
-		}
-
-		const intervalMs = this.settings.syncIntervalMinutes * 60 * 1000;
-		this.syncInterval = window.setInterval(async () => {
-			await this.syncDataSources();
-		}, intervalMs);
-
-		console.log(`Sync interval started: ${this.settings.syncIntervalMinutes} minutes`);
-	}
-
-	/**
 	 * Sync all connected data sources
 	 */
 	async syncDataSources(): Promise<void> {
 		console.log('Starting data source sync...');
-
-		// Check if any data sources are connected
-		const hasConnections =
-			this.settings.googleTokens ||
-			this.settings.spotifyTokens ||
-			this.settings.ynabToken;
-
-		if (!hasConnections) {
-			new Notice('No data sources connected yet');
-			return;
-		}
 
 		if (this.statusBarItem) {
 			this.statusBarItem.setText('Generous AI: Syncing...');
 		}
 
 		try {
-			// TODO: Implement actual sync logic
-			new Notice('Sync feature coming soon');
-
-			// Update last sync timestamp
-			this.settings.lastSyncTimestamp = Date.now();
-			await this.saveSettings();
+			await this.syncManager.syncAll();
 		} catch (error) {
 			console.error('Sync failed:', error);
 			new Notice('Sync failed - check console for details');
@@ -367,6 +353,70 @@ Welcome to your personal assistant!
 
 		if (leaf) {
 			workspace.revealLeaf(leaf);
+		}
+	}
+
+	/**
+	 * Build The Weave from synced data
+	 */
+	async buildWeave(): Promise<void> {
+		if (this.statusBarItem) {
+			this.statusBarItem.setText('Generous AI: Building Weave...');
+		}
+
+		try {
+			await this.weaveManager.buildWeaveFromCachedData((message, progress, total) => {
+				if (this.statusBarItem) {
+					this.statusBarItem.setText(
+						`Generous AI: ${message} (${progress}/${total})`
+					);
+				}
+			});
+
+			// Generate and save weave overview
+			await this.updateWeaveOverview();
+		} catch (error) {
+			console.error('Failed to build weave:', error);
+			new Notice('Failed to build weave - check console for details');
+		} finally {
+			this.updateStatusBar();
+		}
+	}
+
+	/**
+	 * View The Weave overview
+	 */
+	async viewWeave(): Promise<void> {
+		const weavePath = `${this.settings.userFolderPath}/The Weave/Overview.md`;
+
+		// Check if overview exists, if not create it
+		let weaveFile = this.app.vault.getAbstractFileByPath(weavePath);
+
+		if (!weaveFile) {
+			await this.updateWeaveOverview();
+			weaveFile = this.app.vault.getAbstractFileByPath(weavePath);
+		}
+
+		if (weaveFile instanceof TFile) {
+			await this.app.workspace.getLeaf().openFile(weaveFile);
+		} else {
+			new Notice('Could not open Weave overview');
+		}
+	}
+
+	/**
+	 * Update The Weave overview file
+	 */
+	async updateWeaveOverview(): Promise<void> {
+		const weavePath = `${this.settings.userFolderPath}/The Weave/Overview.md`;
+		const markdown = await this.weaveManager.generateWeaveOverview();
+
+		const existingFile = this.app.vault.getAbstractFileByPath(weavePath);
+
+		if (existingFile instanceof TFile) {
+			await this.app.vault.modify(existingFile, markdown);
+		} else {
+			await this.app.vault.create(weavePath, markdown);
 		}
 	}
 }

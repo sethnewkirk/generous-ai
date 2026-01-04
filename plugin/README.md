@@ -14,11 +14,9 @@ The plugin follows the "British servant" principle (inspired by Jeeves from P.G.
 - **Never mention virtue** - Guide toward better choices through practical suggestions, not moral instruction
 - **Always dismissable** - You maintain complete control
 
-## Current Status: Phase A Foundation ✓
+## Current Status: Phase B Data Integration ✓
 
 **Phase A (Foundation) - COMPLETE**
-
-The plugin now includes:
 - ✅ Obsidian plugin scaffold with TypeScript
 - ✅ Plugin settings tab with master password security
 - ✅ Encrypted storage for API keys and sensitive data
@@ -27,6 +25,16 @@ The plugin now includes:
 - ✅ Basic sidebar chat interface (UI shell)
 - ✅ Status bar component
 - ✅ Core commands (Open Dashboard, Open Sidebar, etc.)
+
+**Phase B (Data Integration) - COMPLETE**
+- ✅ Sync service architecture with base classes
+- ✅ OAuth helper utilities for desktop and mobile
+- ✅ Google integration (Gmail, Calendar, Drive)
+- ✅ Spotify integration (listening history, top tracks)
+- ✅ YNAB integration (budget transactions)
+- ✅ Sync manager for coordinating all services
+- ✅ Background sync engine with scheduling
+- ✅ Token refresh and authentication management
 
 ## Features
 
@@ -51,20 +59,29 @@ The plugin now includes:
 1. **Settings Management**
    - Master password creation and unlock
    - AI provider configuration (Claude/OpenAI)
-   - Data source connections (placeholders for Google, Spotify, YNAB)
+   - Data source connections (Google, Spotify, YNAB)
    - Guidance level controls (4 tiers)
 
-2. **Vault Integration**
+2. **Data Integration** ✨ NEW
+   - **Google**: Gmail, Calendar, and Drive sync
+   - **Spotify**: Recently played, top tracks, saved songs
+   - **YNAB**: Budget transactions and categorization
+   - OAuth token management with automatic refresh
+   - Background sync engine with configurable intervals
+   - Incremental sync support (delta updates)
+
+3. **Vault Integration**
    - Automatic folder structure creation
    - Dashboard file with status overview
    - Command palette integration
    - Sidebar view for chat interface
 
-3. **Database Layer**
+4. **Database Layer**
    - Entity storage (people, places, events, etc.)
    - Relationship tracking
    - Conversation history
    - Sync state management
+   - Cached external data for fast access
 
 ## Installation (Development)
 
@@ -104,6 +121,15 @@ plugin/
 ├── database.ts          # IndexedDB wrapper (Dexie)
 ├── crypto.ts            # Encryption utilities
 ├── types.ts             # TypeScript type definitions
+├── sync/                # Data integration services
+│   ├── types.ts         # Sync-related types
+│   ├── base-service.ts  # Base sync service class
+│   ├── sync-manager.ts  # Sync coordinator
+│   ├── oauth-helper.ts  # OAuth utilities
+│   ├── google-service.ts   # Google integration
+│   ├── spotify-service.ts  # Spotify integration
+│   ├── ynab-service.ts     # YNAB integration
+│   └── README.md        # Sync architecture docs
 ├── manifest.json        # Plugin metadata
 ├── package.json         # Dependencies
 ├── tsconfig.json        # TypeScript config
@@ -121,14 +147,15 @@ plugin/
 
 ## Roadmap
 
-### Phase B: Data Integration (Next)
-- Google OAuth integration (Gmail, Calendar, Drive)
-- Spotify API integration
-- YNAB budget data import
-- Local file import
-- Background sync engine
+### Phase B: Data Integration ✓ COMPLETE
+- ✅ Google OAuth integration (Gmail, Calendar, Drive)
+- ✅ Spotify API integration
+- ✅ YNAB budget data import
+- ✅ Background sync engine with scheduling
+- ✅ Service-based sync architecture
+- ⏳ Local file import (deferred to later phase)
 
-### Phase C: The Weave (Knowledge Graph)
+### Phase C: The Weave (Knowledge Graph) - NEXT
 - Kuzu graph database integration
 - LLM-powered entity extraction
 - Relationship inference
