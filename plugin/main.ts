@@ -9,12 +9,14 @@ import { GenerousAISettingTab } from './settings';
 import { encrypt, decrypt, generateSalt } from './crypto';
 import { GenerousAISidebarView, VIEW_TYPE_GENEROUS_AI } from './sidebar-view';
 import { SyncManager } from './sync/sync-manager';
+import { WeaveManager } from './weave/weave-manager';
 
 export default class GenerousAIPlugin extends Plugin {
 	settings: GenerousAISettings;
 	private masterPassword: string | null = null;
 	private statusBarItem: HTMLElement | null = null;
 	syncManager: SyncManager;
+	weaveManager: WeaveManager;
 
 	async onload() {
 		console.log('Loading Generous AI plugin');
@@ -24,6 +26,9 @@ export default class GenerousAIPlugin extends Plugin {
 
 		// Initialize sync manager
 		this.syncManager = new SyncManager(this);
+
+		// Initialize weave manager
+		this.weaveManager = new WeaveManager(this);
 
 		// Register sidebar view
 		this.registerView(
@@ -80,6 +85,9 @@ export default class GenerousAIPlugin extends Plugin {
 
 		// Initialize sync services now that we have the password
 		await this.syncManager.initialize();
+
+		// Initialize weave manager
+		await this.weaveManager.initialize();
 
 		// Start sync interval if configured
 		if (this.settings.syncIntervalMinutes > 0) {
@@ -256,18 +264,21 @@ Welcome to your personal assistant!
 			},
 		});
 
+		// Command: Build The Weave
+		this.addCommand({
+			id: 'build-weave',
+			name: 'Build The Weave from Data',
+			callback: async () => {
+				await this.buildWeave();
+			},
+		});
+
 		// Command: View The Weave
 		this.addCommand({
 			id: 'view-weave',
 			name: 'View The Weave',
-			callback: () => {
-				const weavePath = `${this.settings.userFolderPath}/The Weave/Overview.md`;
-				const weave = this.app.vault.getAbstractFileByPath(weavePath);
-				if (weave instanceof TFile) {
-					this.app.workspace.getLeaf().openFile(weave);
-				} else {
-					new Notice('The Weave has not been built yet');
-				}
+			callback: async () => {
+				await this.viewWeave();
 			},
 		});
 	}
@@ -342,6 +353,70 @@ Welcome to your personal assistant!
 
 		if (leaf) {
 			workspace.revealLeaf(leaf);
+		}
+	}
+
+	/**
+	 * Build The Weave from synced data
+	 */
+	async buildWeave(): Promise<void> {
+		if (this.statusBarItem) {
+			this.statusBarItem.setText('Generous AI: Building Weave...');
+		}
+
+		try {
+			await this.weaveManager.buildWeaveFromCachedData((message, progress, total) => {
+				if (this.statusBarItem) {
+					this.statusBarItem.setText(
+						`Generous AI: ${message} (${progress}/${total})`
+					);
+				}
+			});
+
+			// Generate and save weave overview
+			await this.updateWeaveOverview();
+		} catch (error) {
+			console.error('Failed to build weave:', error);
+			new Notice('Failed to build weave - check console for details');
+		} finally {
+			this.updateStatusBar();
+		}
+	}
+
+	/**
+	 * View The Weave overview
+	 */
+	async viewWeave(): Promise<void> {
+		const weavePath = `${this.settings.userFolderPath}/The Weave/Overview.md`;
+
+		// Check if overview exists, if not create it
+		let weaveFile = this.app.vault.getAbstractFileByPath(weavePath);
+
+		if (!weaveFile) {
+			await this.updateWeaveOverview();
+			weaveFile = this.app.vault.getAbstractFileByPath(weavePath);
+		}
+
+		if (weaveFile instanceof TFile) {
+			await this.app.workspace.getLeaf().openFile(weaveFile);
+		} else {
+			new Notice('Could not open Weave overview');
+		}
+	}
+
+	/**
+	 * Update The Weave overview file
+	 */
+	async updateWeaveOverview(): Promise<void> {
+		const weavePath = `${this.settings.userFolderPath}/The Weave/Overview.md`;
+		const markdown = await this.weaveManager.generateWeaveOverview();
+
+		const existingFile = this.app.vault.getAbstractFileByPath(weavePath);
+
+		if (existingFile instanceof TFile) {
+			await this.app.vault.modify(existingFile, markdown);
+		} else {
+			await this.app.vault.create(weavePath, markdown);
 		}
 	}
 }
