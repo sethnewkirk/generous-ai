@@ -1,0 +1,15 @@
+# Claude Code cache and local settings
+.claude/cache/
+.claude/settings.local.json
+
+# Node modules (future Obsidian plugin development)
+node_modules/
+*.log
+
+# Build artifacts
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
