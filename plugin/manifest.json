@@ -1,0 +1,10 @@
+{
+	"id": "generous-ai",
+	"name": "Generous AI",
+	"version": "0.1.0",
+	"minAppVersion": "1.4.0",
+	"description": "A personal AI assistant that learns about you through your data and gently guides you toward living well",
+	"author": "Generous AI Project",
+	"authorUrl": "https://github.com/sethnewkirk/generous-ai",
+	"isDesktopOnly": false
+}
